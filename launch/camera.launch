@@ -3,6 +3,8 @@
   	<arg name="camera_name" default="camera" />
   	<!-- video_stream_provider can be a number as a video device or a url of a video stream -->
   	<arg name="video_stream_provider" default="0" />
+	<!-- opencv_backend can be any of the available backends of your instalation -->
+	<arg name="opencv_backend" default="ANY" />
   	<!-- set camera fps to -->
   	<arg name="set_camera_fps" default="30" />
   	<!-- set buffer queue size of frame capturing to -->
@@ -37,6 +39,7 @@
 	    	<remap from="camera" to="image_raw" />
 	    	<param name="camera_name" type="string" value="$(arg camera_name)" />
 	        <param name="video_stream_provider" type="string" value="$(arg video_stream_provider)" />
+		<param name="backend" value="$(arg opencv_backend)" />	
 	        <param name="set_camera_fps" type="double" value="$(arg set_camera_fps)" />
 	        <param name="buffer_queue_size" type="int" value="$(arg buffer_queue_size)" />
 	        <param name="fps" type="double" value="$(arg fps)" />
