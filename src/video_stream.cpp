@@ -151,11 +151,11 @@ virtual void do_capture() {
         }
         if (!cap->read(frame)) {
           NODELET_ERROR_STREAM_THROTTLE(1.0, "Could not capture frame (frame_counter: " << frame_counter << ")");
-          if (true || latest_config.reopen_on_read_failure) {
+          if (latest_config.reopen_on_read_failure) {
             NODELET_WARN_STREAM_THROTTLE(1.0, "trying to reopen the device");
             unsubscribe();
             while(!cap || !cap->isOpened())
-            {
+		    {
               subscribe(false);
               if(!cap || !cap->isOpened())
                 boost::this_thread::yield();
@@ -422,6 +422,7 @@ virtual void configCallback(VideoStreamConfig& new_config, uint32_t level) {
   NODELET_INFO_STREAM("Flip vertical image is: " << ((new_config.flip_vertical)?"true":"false"));
   NODELET_INFO_STREAM("Video start frame is: " << new_config.start_frame);
   NODELET_INFO_STREAM("Video stop frame is: " << new_config.stop_frame);
+  NODELET_INFO_STREAM("Reopen on read failure is: " << new_config.reopen_on_read_failure);
 
   if (new_config.width != 0 && new_config.height != 0)
   {
@@ -442,6 +443,7 @@ virtual void onInit() {
     nh.reset(new ros::NodeHandle(getNodeHandle()));
     pnh.reset(new ros::NodeHandle(getPrivateNodeHandle()));
     subscriber_num = 0;
+    
 
     // provider can be an url (e.g.: rtsp://10.0.0.1:554) or a number of device, (e.g.: 0 would be /dev/video0)
     pnh->param<std::string>("video_stream_provider", video_stream_provider, "0");
