@@ -41,6 +41,7 @@
 #include <camera_info_manager/camera_info_manager.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/videoio/registry.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <sstream>
 #include <stdexcept>
@@ -72,6 +73,32 @@ bool capture_thread_running;
 boost::thread capture_thread;
 ros::Timer publish_timer;
 sensor_msgs::CameraInfo cam_info_msg;
+std::string backend;
+std::map<std::string, int> backend_map;
+
+void initalize_backend_map()
+{
+  backend_map["ANY"] = 0;
+  auto backends = cv::videoio_registry::getBackends();
+  for(auto backend : backends)
+  {
+    NODELET_INFO_STREAM("Found: "<<cv::videoio_registry::getBackendName(backend)<<" backend for OpenCV.");
+    backend_map[cv::videoio_registry::getBackendName(backend)] = backend;
+  }
+}
+
+int get_backend()
+{
+  auto it = backend_map.find(backend);
+  if (it == backend_map.end()) 
+  {
+    NODELET_WARN_STREAM("Backend not registered in map. Reverting to ANY (first available).");
+    return 0;
+  }
+
+  NODELET_INFO_STREAM("Selecting "<<it->first<<" as backend for OPENCV.");
+  return it->second;
+}
 
 // Based on the ros tutorial on transforming opencv images to Image messages
 
@@ -124,7 +151,7 @@ virtual void do_capture() {
         }
         if (!cap->read(frame)) {
           NODELET_ERROR_STREAM_THROTTLE(1.0, "Could not capture frame (frame_counter: " << frame_counter << ")");
-          if (latest_config.reopen_on_read_failure) {
+          if (true || latest_config.reopen_on_read_failure) {
             NODELET_WARN_STREAM_THROTTLE(1.0, "trying to reopen the device");
             unsubscribe();
             while(!cap || !cap->isOpened())
@@ -147,7 +174,7 @@ virtual void do_capture() {
         {
             if (latest_config.loop_videofile)
             {
-                cap->open(video_stream_provider);
+                cap->open(video_stream_provider, get_backend());
                 cap->set(cv::CAP_PROP_POS_FRAMES, latest_config.start_frame);
                 frame_counter = 0;
                 NODELET_DEBUG("Reached end of frames, looping.");
@@ -240,10 +267,10 @@ virtual void subscribe(bool launch_thread=true) {
   try {
     int device_num = std::stoi(video_stream_provider);
     NODELET_INFO_STREAM("Opening VideoCapture with provider: /dev/video" << device_num);
-    cap->open(device_num);
+    cap->open(device_num, get_backend());
   } catch (std::invalid_argument &ex) {
     NODELET_INFO_STREAM("Opening VideoCapture with provider: " << video_stream_provider);
-    cap->open(video_stream_provider);
+    cap->open(video_stream_provider, get_backend());
     if(video_stream_provider_type == "videofile" )
       {
         // We can only check the number of frames when we actually open the video file
@@ -418,6 +445,8 @@ virtual void onInit() {
 
     // provider can be an url (e.g.: rtsp://10.0.0.1:554) or a number of device, (e.g.: 0 would be /dev/video0)
     pnh->param<std::string>("video_stream_provider", video_stream_provider, "0");
+    pnh->param<std::string>("backend", backend, "ANY");
+    initalize_backend_map();
     // check file type
     try {
       int device_num = std::stoi(video_stream_provider);
