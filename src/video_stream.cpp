@@ -59,6 +59,7 @@ class VideoStreamNodelet: public nodelet::Nodelet {
 protected:
 boost::shared_ptr<ros::NodeHandle> nh, pnh;
 image_transport::CameraPublisher pub;
+ros::Publisher pub_compressed;
 boost::shared_ptr<dynamic_reconfigure::Server<VideoStreamConfig> > dyn_srv;
 VideoStreamConfig config;
 std::mutex q_mutex, s_mutex, c_mutex, p_mutex;
@@ -108,6 +109,8 @@ virtual void do_capture() {
     cv::Mat frame;
     VideoStreamConfig latest_config = config;
     ros::Rate camera_fps_rate(latest_config.set_camera_fps);
+    ros::Rate wait_rate(30.0);
+
 
     int frame_counter = 0;
     // Read frames as fast as possible
@@ -136,6 +139,7 @@ virtual void do_capture() {
         {
             camera_fps_rate.sleep();
         }
+        wait_rate.sleep();
         NODELET_DEBUG_STREAM("Current frame_counter: " << frame_counter << " latest_config.stop_frame - latest_config.start_frame: " << latest_config.stop_frame - latest_config.start_frame);
         if (video_stream_provider_type == "videofile" &&
             frame_counter >= latest_config.stop_frame - latest_config.start_frame)
@@ -143,7 +147,7 @@ virtual void do_capture() {
             if (latest_config.loop_videofile)
             {
                 cap->open(video_stream_provider);
-                cap->set(cv::CAP_PROP_POS_FRAMES, latest_config.start_frame);
+                //cap->set(cv::CAP_PROP_POS_FRAMES, latest_config.start_frame);
                 frame_counter = 0;
                 NODELET_DEBUG("Reached end of frames, looping.");
             }
@@ -197,6 +201,17 @@ virtual void do_publish(const ros::TimerEvent& event) {
           cv::flip(frame, frame, 1);
         else if (latest_config.flip_vertical)
           cv::flip(frame, frame, 0);
+
+	ROS_INFO("DATA: %d, %d", frame.total(), frame.cols);
+
+
+	sensor_msgs::CompressedImagePtr cimage(new sensor_msgs::CompressedImage());
+	cimage->format = "jpeg";
+	cimage->data.assign(frame.data, frame.data + frame.total());
+
+	pub_compressed.publish(cimage);
+
+        /*
         cv_bridge::CvImagePtr cv_image =
           boost::make_shared<cv_bridge::CvImage>(header, "bgr8", frame);
         if (latest_config.output_encoding != "bgr8")
@@ -217,6 +232,7 @@ virtual void do_publish(const ros::TimerEvent& event) {
         }
         // The timestamps are in sync thanks to this publisher
         pub.publish(*msg, cam_info_msg, ros::Time::now());
+	*/
     }
 }
 
@@ -233,9 +249,12 @@ virtual void subscribe() {
   // initialize camera
   cap.reset(new cv::VideoCapture);
   try {
-    int device_num = std::stoi(video_stream_provider);
-    NODELET_INFO_STREAM("Opening VideoCapture with provider: /dev/video" << device_num);
-    cap->open(device_num);
+    //int device_num = std::stoi(video_stream_provider);
+    NODELET_INFO_STREAM("Opening VideoCapture with provider: " << video_stream_provider);
+    cap->set(cv::CAP_GSTREAMER, 1);
+    cap->open(video_stream_provider);
+    cap->set(cv::CAP_PROP_CONVERT_RGB, 0);
+    cap->set(cv::CAP_PROP_FORMAT, -1);
   } catch (std::invalid_argument &ex) {
     NODELET_INFO_STREAM("Opening VideoCapture with provider: " << video_stream_provider);
     cap->open(video_stream_provider);
@@ -260,7 +279,7 @@ virtual void subscribe() {
             latest_config.start_frame = 0;
           }
 
-        cap->set(cv::CAP_PROP_POS_FRAMES, latest_config.start_frame);
+        //cap->set(cv::CAP_PROP_POS_FRAMES, latest_config.start_frame);
       }
     if (!cap->isOpened()) {
       NODELET_FATAL_STREAM("Invalid 'video_stream_provider': " << video_stream_provider);
@@ -268,7 +287,7 @@ virtual void subscribe() {
     }
   }
   NODELET_INFO_STREAM("Video stream provider type detected: " << video_stream_provider_type);
-
+ 
   double reported_camera_fps;
   // OpenCV 2.4 returns -1 (instead of a 0 as the spec says) and prompts an error
   // HIGHGUI ERROR: V4L2: Unable to get property <unknown property string>(5) - Invalid argument
@@ -278,27 +297,27 @@ virtual void subscribe() {
   else
     NODELET_INFO_STREAM("Backend can't provide camera FPS information");
 
-  cap->set(cv::CAP_PROP_FPS, latest_config.set_camera_fps);
+  //cap->set(cv::CAP_PROP_FPS, latest_config.set_camera_fps);
   if(!cap->isOpened()){
     NODELET_ERROR_STREAM("Could not open the stream.");
     return;
   }
   if (latest_config.width != 0 && latest_config.height != 0){
-    cap->set(cv::CAP_PROP_FRAME_WIDTH, latest_config.width);
-    cap->set(cv::CAP_PROP_FRAME_HEIGHT, latest_config.height);
+    //cap->set(cv::CAP_PROP_FRAME_WIDTH, latest_config.width);
+    //cap->set(cv::CAP_PROP_FRAME_HEIGHT, latest_config.height);
   }
 
-  cap->set(cv::CAP_PROP_BRIGHTNESS, latest_config.brightness);
-  cap->set(cv::CAP_PROP_CONTRAST, latest_config.contrast);
-  cap->set(cv::CAP_PROP_HUE, latest_config.hue);
-  cap->set(cv::CAP_PROP_SATURATION, latest_config.saturation);
+  //cap->set(cv::CAP_PROP_BRIGHTNESS, latest_config.brightness);
+  //cap->set(cv::CAP_PROP_CONTRAST, latest_config.contrast);
+  //cap->set(cv::CAP_PROP_HUE, latest_config.hue);
+  //cap->set(cv::CAP_PROP_SATURATION, latest_config.saturation);
 
   if (latest_config.auto_exposure) {
-    cap->set(cv::CAP_PROP_AUTO_EXPOSURE, 0.75);
+    //cap->set(cv::CAP_PROP_AUTO_EXPOSURE, 0.75);
     latest_config.exposure = 0.5;
   } else {
-    cap->set(cv::CAP_PROP_AUTO_EXPOSURE, 0.25);
-    cap->set(cv::CAP_PROP_EXPOSURE, latest_config.exposure);
+    //cap->set(cv::CAP_PROP_AUTO_EXPOSURE, 0.25);
+    //cap->set(cv::CAP_PROP_EXPOSURE, latest_config.exposure);
   }
 
   try {
@@ -410,7 +429,7 @@ virtual void onInit() {
     pnh->param<std::string>("video_stream_provider", video_stream_provider, "0");
     // check file type
     try {
-      int device_num = std::stoi(video_stream_provider);
+      //int device_num = std::stoi(video_stream_provider);
       video_stream_provider_type ="videodevice";
     } catch (std::invalid_argument &ex) {
       if (video_stream_provider.find("http://") != std::string::npos ||
@@ -458,6 +477,7 @@ virtual void onInit() {
       connect_cb, disconnect_cb,
       info_connect_cb, info_disconnect_cb,
       ros::VoidPtr(), false);
+    pub_compressed = nh->advertise<sensor_msgs::CompressedImage>("/camera/image_raw/compressed",1);
 }
 
 virtual ~VideoStreamNodelet() {
