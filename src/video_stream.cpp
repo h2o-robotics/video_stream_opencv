@@ -202,9 +202,6 @@ virtual void do_publish(const ros::TimerEvent& event) {
         else if (latest_config.flip_vertical)
           cv::flip(frame, frame, 0);
 
-	ROS_INFO("DATA: %d, %d", frame.total(), frame.cols);
-
-
 	sensor_msgs::CompressedImagePtr cimage(new sensor_msgs::CompressedImage());
 	cimage->format = "jpeg";
 	cimage->data.assign(frame.data, frame.data + frame.total());
